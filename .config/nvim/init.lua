@@ -2,26 +2,6 @@
 -- Enable syntax highlighting on Gentoo configuration files
 vim.opt.rtp:append('/usr/share/vim/vimfiles')
 
---Set completeopt to have a better completion experience
--- :help completeopt
--- menuone: popup even when there's only one match
--- noinsert: Do not insert text until a selection is made
--- noselect: Do not select, force to select one from the menu
--- shortness: avoid showing extra messages when using completion
--- updatetime: set updatetime for CursorHold
-vim.opt.completeopt = {'menuone', 'noselect', 'noinsert'}
-vim.opt.shortmess = vim.opt.shortmess + { c = true}
-vim.api.nvim_set_option('updatetime', 300) 
-
--- Fixed column for diagnostics to appear
--- Show autodiagnostic popup on cursor hover_range
--- Goto previous / next diagnostic warning / error 
--- Show inlay_hints more frequently 
-vim.cmd([[
-set signcolumn=yes
-autocmd CursorHold * lua vim.diagnostic.open_float(nil, { focusable = false })
-]])
-
 -- Lazy.nvim
 vim.g.mapleader = " " -- Make sure to set `mapleader` before lazy so your mappings are correct
 vim.g.maplocalleader = "\\" -- Same for `maplocalleader`
@@ -42,6 +22,10 @@ vim.opt.rtp:prepend(lazypath)
 
 -- Lazy.nvim Setup
 require("lazy").setup({
+	-- Color Theme
+	{
+		"dasupradyumna/midnight.nvim", lazy = false, priority = 1000
+	},
 	-- Telescope
 	{
 		"nvim-telescope/telescope.nvim",
@@ -64,8 +48,6 @@ require("lazy").setup({
 	{
 		"neovim/nvim-lspconfig",
 		dependencies = {
-			-- Parser
-			"nvim-treesitter/nvim-treesitter",
 			-- Completion framework
     			"hrsh7th/nvim-cmp",
     			-- LSP completion source
@@ -79,6 +61,10 @@ require("lazy").setup({
     			"hrsh7th/vim-vsnip",
 		},
 	},
+	-- TreeSitter Parser
+	{
+		"nvim-treesitter/nvim-treesitter",
+	},
 	-- Mason
 	{
 		"williamboman/mason.nvim",
@@ -86,9 +72,19 @@ require("lazy").setup({
 			"williamboman/mason-lspconfig.nvim",
 		},
 	},
-	-- Rust LSP tools
+	-- Rust LSP Tools
 	{
 		"simrat39/rust-tools.nvim",
+		dependencies = {
+			"neovim/nvim-lspconfig",
+		},
+	},
+	-- C/C++ LSP Tools
+	{
+		"ranjithshegde/ccls.nvim",
+		dependencies = {
+			"neovim/nvim-lspconfig",
+		},
 	},
 	-- Markdown Glow
 	{ 
@@ -96,10 +92,14 @@ require("lazy").setup({
 	},
 })
 
+-- Color Theme
+vim.cmd.colorscheme('midnight')
+
 -- Telescope Setup
 -- You dont need to set any of these options. These are the default ones. Only
 -- the loading is important
-require('telescope').setup {
+local telescope = require('telescope')
+telescope.setup {
   extensions = {
     fzf = {
       fuzzy = true,                    -- false will only do exact matching
@@ -112,7 +112,7 @@ require('telescope').setup {
 }
 -- To get fzf loaded and working with telescope, you need to call
 -- load_extension, somewhere after setup function:
-require('telescope').load_extension('fzf')
+telescope.load_extension('fzf')
 -- Telescope Buitin Pickers
 local builtin = require('telescope.builtin')
 vim.keymap.set('n', '<leader>ff', builtin.find_files, {})
@@ -122,7 +122,7 @@ vim.keymap.set('n', '<leader>fh', builtin.help_tags, {})
 
 -- Harpoon Setup
 local harpoon = require('harpoon')
-harpoon:setup({})
+harpoon:setup {}
 
 -- Harpoon basic telescope configuration
 local conf = require("telescope.config").values
@@ -158,14 +158,21 @@ vim.keymap.set("n", "<C-p>", function() harpoon:list():prev() end)
 vim.keymap.set("n", "<C-n>", function() harpoon:list():next() end)
 
 -- Mason Setup
-require("mason").setup()
+require("mason").setup {
+    ui = {
+        icons = {
+            package_installed = "✓",
+            package_pending = "➜",
+            package_uninstalled = "✗"
+        }
+    }
+}
 -- Mason Lspconfig Setup
 require("mason-lspconfig").setup {
 	ensure_installed = {
     		"lua_ls",
 		"rust_analyzer",
 		"zls",
-		-- "clangd",
 		-- "gopls",
 		-- "hls",
 		-- "asm_lsp",
@@ -183,14 +190,27 @@ lspconfig.lua_ls.setup {}
 
 -- Rust LSP
 lspconfig.rust_analyzer.setup {}
-require("rust-tools").setup {}
+local rt = require("rust-tools")
+rt.setup {
+  server = {
+    on_attach = function(_, bufnr)
+      -- Hover actions
+      vim.keymap.set("n", "<C-space>", rt.hover_actions.hover_actions, { buffer = bufnr })
+      -- Code action groups
+      vim.keymap.set("n", "<Leader>a", rt.code_action_group.code_action_group, { buffer = bufnr })
+    end,
+  },
+}
 
 -- Zig LSP
 lspconfig.zls.setup {}
 
+-- C/C++ LSP
+require("ccls").setup { lsp = { lspconfig = {} }}
+
 -- Treesitter Plugin Setup 
 require('nvim-treesitter.configs').setup {
-  ensure_installed = { "lua", "rust", "toml" },
+  ensure_installed = { "lua", "rust", "toml", "zig", },
   auto_install = true,
   highlight = {
     enable = true,
@@ -218,7 +238,7 @@ sign({name = 'DiagnosticSignWarn', text = ''})
 sign({name = 'DiagnosticSignHint', text = ''})
 sign({name = 'DiagnosticSignInfo', text = ''})
 
-vim.diagnostic.config({
+vim.diagnostic.config {
     virtual_text = false,
     signs = true,
     update_in_insert = true,
@@ -230,15 +250,10 @@ vim.diagnostic.config({
         header = '',
         prefix = '',
     },
-})
-
-vim.cmd([[
-set signcolumn=yes
-autocmd CursorHold * lua vim.diagnostic.open_float(nil, { focusable = false })
-]])
+}
 
 -- Completion Plugin Setup
-local cmp = require'cmp'
+local cmp = require('cmp')
 cmp.setup({
   -- Enable LSP snippets
   snippet = {
@@ -290,6 +305,25 @@ cmp.setup({
   },
 })
 
+-- Set completeopt to have a better completion experience
+-- :help completeopt
+-- menuone: popup even when there's only one match
+-- noinsert: Do not insert text until a selection is made
+-- noselect: Do not select, force to select one from the menu
+-- shortness: avoid showing extra messages when using completion
+-- updatetime: set updatetime for CursorHold
+vim.opt.completeopt = {'menuone', 'noselect', 'noinsert'}
+vim.opt.shortmess = vim.opt.shortmess + { c = true}
+vim.api.nvim_set_option('updatetime', 300) 
+
+-- Fixed column for diagnostics to appear
+-- Show autodiagnostic popup on cursor hover_range
+-- Goto previous / next diagnostic warning / error 
+-- Show inlay_hints more frequently 
+vim.cmd([[
+set signcolumn=yes
+autocmd CursorHold * lua vim.diagnostic.open_float(nil, { focusable = false })
+]])
+
 -- Markdown Glow Setup
 require("glow").setup {}
-
